@@ -3,40 +3,55 @@
   "gd": { "win": "2.2081" },
   "id": "munchmunch67.click-buffer",
   "name": "Click Buffer",
-  "version": "v2.0.0",
+  "version": "v2.1.0",
   "developer": "munchmunch67",
-  "description": "Tick-based input buffer. Stage 1: delays clicks by a set number of physics ticks.",
+  "description": "Predictive input buffer. If a click would kill you, it is delayed by the smallest number of physics ticks that survives.",
   "settings": {
     "enabled": {
       "type": "bool",
       "name": "Enabled",
       "default": true
     },
-    "test-fixed-delay": {
+    "predict": {
       "type": "bool",
-      "name": "Test Mode: Delay Every Click",
-      "description": "Stage 1 test. Delays every affected click by the max delay below, to prove the delay system works. Turn this off once the lookahead (stage 2) is added.",
+      "name": "Predictive Delay",
+      "description": "Simulate ahead on each click and delay it only as much as needed to survive.",
       "default": true
     },
     "max-delay-ticks": {
       "type": "int",
       "name": "Max Delay (ticks)",
-      "description": "Physics ticks to hold a click. At 240 TPS, 4 ticks = 1 frame at 60 FPS.",
-      "default": 4,
+      "description": "Longest delay allowed. 240 ticks per second, so 4 ticks = 1 frame at 60 FPS and 32 ticks = 8 frames.",
+      "default": 8,
       "min": 0,
       "max": 32,
+      "control": { "slider": true, "input": true }
+    },
+    "lookahead-ticks": {
+      "type": "int",
+      "name": "Lookahead (ticks)",
+      "description": "How far ahead to simulate after the click. Higher is safer but slower.",
+      "default": 24,
+      "min": 4,
+      "max": 96,
       "control": { "slider": true, "input": true }
     },
     "wave-only": {
       "type": "bool",
       "name": "Wave Only",
-      "description": "Only affect clicks while in wave mode.",
+      "description": "Only affect input while in wave mode.",
       "default": true
+    },
+    "test-fixed-delay": {
+      "type": "bool",
+      "name": "Test Mode: Fixed Delay",
+      "description": "Only used when Predictive Delay is off. Delays every click by Max Delay.",
+      "default": false
     },
     "debug-log": {
       "type": "bool",
       "name": "Debug Log",
-      "description": "Writes delay info and the real tick rate to the Geode log.",
+      "description": "Writes what the mod decides to the Geode log.",
       "default": true
     }
   }
