@@ -71,10 +71,10 @@ class $modify(BufferGJBGL, GJBaseGameLayer) {
     }
 
     // ---- per physics step ---------------------------------------------
-    void processCommands(float dt) {
+     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
         auto f = m_fields.self();
         f->time += dt;
-        GJBaseGameLayer::processCommands(dt);
+                GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
 
         for (int i = 0; i < 2; i++) {
             if (!f->releaseDeferred[i]) continue;
