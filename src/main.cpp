@@ -1,94 +1,124 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
+#include <chrono>
+#include <vector>
 
 using namespace geode::prelude;
 
+// STAGE 1: tick-based delay plumbing.
+// Clicks can be held back by N physics ticks and then released into the game.
+// In test mode every affected click gets the same fixed delay, so you can
+// confirm the mechanism works before the lookahead (stage 2) decides the delay.
+
+struct PendingInput {
+    bool down;
+    int button;
+    bool isPlayer1;
+    uint64_t due;
+};
+
 class $modify(BufferGJBGL, GJBaseGameLayer) {
     struct Fields {
-        double time = 0.0;
-        double pressTime[2] = {-1e9, -1e9};
-        bool releaseDeferred[2] = {false, false};
-        bool landedWhileDeferred[2] = {false, false};
+        uint64_t tick = 0;
+        std::vector<PendingInput> pending;
+        uint64_t lastDelay[2] = {0, 0};
+        uint64_t calls = 0;
+        std::chrono::steady_clock::time_point lastReport = std::chrono::steady_clock::now();
     };
 
-    // ---- helpers -------------------------------------------------------
-    bool bufferActive() {
-        auto mod = Mod::get();
-        if (!mod->getSettingValue<bool>("enabled")) return false;
-        if (mod->getSettingValue<bool>("disable-on-rated") &&
-            m_level && m_level->m_stars.value() > 0) return false;
+    // ---- settings helpers ----------------------------------------------
+    bool bufferOn() {
+        return Mod::get()->getSettingValue<bool>("enabled");
+    }
+
+    bool debugOn() {
+        return Mod::get()->getSettingValue<bool>("debug-log");
+    }
+
+    uint64_t maxDelayTicks() {
+        auto v = Mod::get()->getSettingValue<int64_t>("max-delay-ticks");
+        return v < 0 ? 0 : static_cast<uint64_t>(v);
+    }
+
+    bool affects(PlayerObject* p) {
+        if (!p) return false;
+        if (Mod::get()->getSettingValue<bool>("wave-only")) return p->m_isDart;
         return true;
     }
 
-    double windowSeconds() {
-        return Mod::get()->getSettingValue<int64_t>("buffer-frames") / 60.0;
-    }
-
-    bool modeAllowed(PlayerObject* p) {
-        if (!Mod::get()->getSettingValue<bool>("cube-like-only")) return true;
-        return !(p->m_isShip || p->m_isBird || p->m_isBall ||
-                 p->m_isDart || p->m_isSwing);
-    }
-
-    void clearState(int i) {
-        auto f = m_fields.self();
-        f->releaseDeferred[i] = false;
-        f->landedWhileDeferred[i] = false;
+    bool hasPendingFor(bool isPlayer1) {
+        for (auto& p : m_fields->pending) {
+            if (p.isPlayer1 == isPlayer1) return true;
+        }
+        return false;
     }
 
     // ---- input ---------------------------------------------------------
     void handleButton(bool down, int button, bool isPlayer1) {
-        // button 1 = jump
-        if (button != 1 || !bufferActive()) {
-            return GJBaseGameLayer::handleButton(down, button, isPlayer1);
-        }
-
-        int i = isPlayer1 ? 0 : 1;
-        if (i == 1 && !Mod::get()->getSettingValue<bool>("affect-player-2")) {
+        // only touch the jump button, and only when the mod is on
+        if (button != 1 || !bufferOn()) {
             return GJBaseGameLayer::handleButton(down, button, isPlayer1);
         }
 
         auto f = m_fields.self();
+        int i = isPlayer1 ? 0 : 1;
         auto player = isPlayer1 ? m_player1 : m_player2;
 
         if (down) {
-            f->pressTime[i] = f->time;
-            clearState(i);
+            uint64_t delay = 0;
+            bool testMode = Mod::get()->getSettingValue<bool>("test-fixed-delay");
+            if (testMode && affects(player)) delay = maxDelayTicks();
+            // STAGE 2 will replace the line above with the lookahead result.
+            f->lastDelay[i] = delay;
+        }
+
+        // A release uses the same delay as its press so the order never flips.
+        uint64_t delay = f->lastDelay[i];
+
+        if (delay == 0 && !hasPendingFor(isPlayer1)) {
             return GJBaseGameLayer::handleButton(down, button, isPlayer1);
         }
 
-        // Release: if the player is airborne and the press was recent,
-        // keep the "hold" alive until landing so the jump fires.
-        bool recent = (f->time - f->pressTime[i]) <= windowSeconds();
-        if (player && !player->m_isOnGround && recent && modeAllowed(player)) {
-            f->releaseDeferred[i] = true;
-            f->landedWhileDeferred[i] = false;
-            return; // swallow the release for now
-        }
+        f->pending.push_back({down, button, isPlayer1, f->tick + delay});
 
-        clearState(i);
-        GJBaseGameLayer::handleButton(down, button, isPlayer1);
+        if (debugOn()) {
+            log::info("[ClickBuffer] {} P{} delayed by {} ticks ({} frames @ 60fps)",
+                      down ? "PRESS" : "RELEASE", i + 1, delay, delay / 4.0);
+        }
     }
 
-    // ---- per physics step ---------------------------------------------
-     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+    // ---- once per physics tick ----------------------------------------
+    void processCommands(float dt, bool isHalfTick, bool isLastTick) {
         auto f = m_fields.self();
-        f->time += dt;
-                GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+        f->tick++;
 
-        for (int i = 0; i < 2; i++) {
-            if (!f->releaseDeferred[i]) continue;
-            auto player = i == 0 ? m_player1 : m_player2;
+        // Dead players: throw away anything still waiting.
+        if ((m_player1 && m_player1->m_isDead) || (m_player2 && m_player2->m_isDead)) {
+            f->pending.clear();
+        }
 
-            bool timedOut = (f->time - f->pressTime[i]) > windowSeconds();
-            bool dead = !player || player->m_isDead;
+        // Release inputs that are due, in order.
+        for (size_t n = 0; n < f->pending.size();) {
+            auto p = f->pending[n];
+            if (p.due <= f->tick) {
+                f->pending.erase(f->pending.begin() + n);
+                GJBaseGameLayer::handleButton(p.down, p.button, p.isPlayer1);
+            } else {
+                n++;
+            }
+        }
 
-            if (player && player->m_isOnGround) f->landedWhileDeferred[i] = true;
-            bool jumped = f->landedWhileDeferred[i] && !player->m_isOnGround;
+        GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
 
-            if (dead || timedOut || jumped) {
-                clearState(i);
-                GJBaseGameLayer::handleButton(false, 1, i == 0);
+        // Debug: report how many ticks per second this function really runs.
+        if (debugOn()) {
+            f->calls++;
+            auto now = std::chrono::steady_clock::now();
+            double secs = std::chrono::duration<double>(now - f->lastReport).count();
+            if (secs >= 5.0) {
+                log::info("[ClickBuffer] processCommands calls per second: {:.1f}", f->calls / secs);
+                f->calls = 0;
+                f->lastReport = now;
             }
         }
     }
