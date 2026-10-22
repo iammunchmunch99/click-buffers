@@ -3,40 +3,41 @@
   "gd": { "win": "2.2081" },
   "id": "munchmunch67.click-buffer",
   "name": "Click Buffer",
-  "version": "v1.0.0",
+  "version": "v2.0.0",
   "developer": "munchmunch67",
-  "description": "Buffers early clicks for a few frames so a slightly-early tap still jumps on landing.",
+  "description": "Tick-based input buffer. Stage 1: delays clicks by a set number of physics ticks.",
   "settings": {
     "enabled": {
       "type": "bool",
       "name": "Enabled",
       "default": true
     },
-    "buffer-frames": {
+    "test-fixed-delay": {
+      "type": "bool",
+      "name": "Test Mode: Delay Every Click",
+      "description": "Stage 1 test. Delays every affected click by the max delay below, to prove the delay system works. Turn this off once the lookahead (stage 2) is added.",
+      "default": true
+    },
+    "max-delay-ticks": {
       "type": "int",
-      "name": "Buffer Window (frames @ 60 FPS)",
-      "description": "How early you can click and still have it count.",
-      "default": 3,
-      "min": 1,
-      "max": 12,
+      "name": "Max Delay (ticks)",
+      "description": "Physics ticks to hold a click. At 240 TPS, 4 ticks = 1 frame at 60 FPS.",
+      "default": 4,
+      "min": 0,
+      "max": 32,
       "control": { "slider": true, "input": true }
     },
-    "cube-like-only": {
+    "wave-only": {
       "type": "bool",
-      "name": "Cube / Robot / Spider Only",
-      "description": "Skip ship, UFO, ball, wave and swing, where extending a hold would change your movement.",
+      "name": "Wave Only",
+      "description": "Only affect clicks while in wave mode.",
       "default": true
     },
-    "affect-player-2": {
+    "debug-log": {
       "type": "bool",
-      "name": "Affect Player 2",
+      "name": "Debug Log",
+      "description": "Writes delay info and the real tick rate to the Geode log.",
       "default": true
-    },
-    "disable-on-rated": {
-      "type": "bool",
-      "name": "Disable on Rated Levels",
-      "description": "Turns the buffer off on levels with stars.",
-      "default": false
     }
   }
 }
