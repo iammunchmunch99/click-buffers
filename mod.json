@@ -1,14 +1,42 @@
 {
-	"geode": "4.10.0",
-	"gd": { "win" "2.2081" },
-		"win": "2.2081",
-	},
-	"id": "$MOD_ID",
-	"name": "$MOD_NAME",
-	"version": "$MOD_VERSION",
-	"developer": "$MOD_DEVELOPER",
-	"description": "$MOD_DESCRIPTION",
-	"dependencies": {
-		"geode.node-ids": ">=v1.23.3"
-	}
+  "geode": "4.10.0",
+  "gd": { "win": "2.2081" },
+  "id": "munchmunch67.click-buffer",
+  "name": "Click Buffer",
+  "version": "v1.0.0",
+  "developer": "munchmunch67",
+  "description": "Buffers early clicks for a few frames so a slightly-early tap still jumps on landing.",
+  "settings": {
+    "enabled": {
+      "type": "bool",
+      "name": "Enabled",
+      "default": true
+    },
+    "buffer-frames": {
+      "type": "int",
+      "name": "Buffer Window (frames @ 60 FPS)",
+      "description": "How early you can click and still have it count.",
+      "default": 3,
+      "min": 1,
+      "max": 12,
+      "control": { "slider": true, "input": true }
+    },
+    "cube-like-only": {
+      "type": "bool",
+      "name": "Cube / Robot / Spider Only",
+      "description": "Skip ship, UFO, ball, wave and swing, where extending a hold would change your movement.",
+      "default": true
+    },
+    "affect-player-2": {
+      "type": "bool",
+      "name": "Affect Player 2",
+      "default": true
+    },
+    "disable-on-rated": {
+      "type": "bool",
+      "name": "Disable on Rated Levels",
+      "description": "Turns the buffer off on levels with stars.",
+      "default": false
+    }
+  }
 }
